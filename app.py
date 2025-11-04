@@ -1,7 +1,7 @@
 # app.py
 import streamlit as st
 import swisseph as swe
-from datetime import datetime, timedelta
+from datetime import datetime, date, timedelta
 from timezonefinder import TimezoneFinder
 from geopy.geocoders import Nominatim
 import pytz
@@ -259,7 +259,7 @@ st.title("Personalized Decennials Calculator (4-Level)")
 with st.form("input_form"):
     col1, col2 = st.columns(2)
     with col1:
-        birth_date = st.date_input("출생일", value=datetime(1970, 1, 1))
+        birth_date = st.date_input("출생일", value=datetime(1970, 1, 1), min_value=date(1500, 1, 1), max_value=date(2200, 12, 31))
         time_str = st.text_input("출생 시간 (HH:MM)", value="00:00", help="예: 0:30, 14:27")
     with col2:
         city_input = st.text_input("출생 도시 (영문)", value="Seoul")
@@ -269,7 +269,13 @@ with st.form("input_form"):
             if cities:
                 labels = [c[0] for c in cities]
                 selected_city = st.selectbox("검색 결과에서 선택", labels, index=0)
-        target_date_input = st.date_input("기준 날짜 (Level 3/4)", value=datetime.now().date())
+        target_date_input = st.date_input(
+        "기준 날짜 (Level 3/4)",
+        value=datetime.now().date(),
+        min_value=date(1900, 1, 1),
+        max_value=date(2100, 12, 31),
+    )
+    submitted = st.form_submit_button("계산 시작")
     submitted = st.form_submit_button("계산 시작")
 
 if submitted:
@@ -551,6 +557,7 @@ if submitted:
         st.dataframe(pd.DataFrame(l4_rows), use_container_width=True)
 
     st.success("모든 계산 완료!")
+
 
 
 
