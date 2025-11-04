@@ -264,29 +264,12 @@ def find_active_with_block(blocks, dt):
             return blk, p
     return None, None
 
-# ==============================
-# Export: 여러 DataFrame을 엑셀 한 파일로
-# ==============================
-def build_export_excel(meta_df, asc_df, l1_df, l1_debug_df, l2_df, l3_df, l4_df) -> bytes:
-    output = BytesIO()
-
-    # 엑셀 파일 생성 (엔진 자동 선택)
-    with pd.ExcelWriter(output) as writer:
-        meta_df.to_excel(writer, index=False, sheet_name="Meta")
-        asc_df.to_excel(writer, index=False, sheet_name="AscTimes")
-        l1_df.to_excel(writer, index=False, sheet_name="Level1")
-        l1_debug_df.to_excel(writer, index=False, sheet_name="Level1_Debug")
-        l2_df.to_excel(writer, index=False, sheet_name="Level2")
-        l3_df.to_excel(writer, index=False, sheet_name="Level3")
-        l4_df.to_excel(writer, index=False, sheet_name="Level4")
-
-    return output.getvalue()
 
 # ==============================
 # UI
 # ==============================
 st.set_page_config(page_title="Decennials Calculator", layout="wide")
-st.title("개인화 Decennials 계산기 (4단계)")
+st.title("데세니얼 계산기 (레벨4)")
 
 with st.form("input_form"):
     col1, col2 = st.columns(2)
@@ -355,8 +338,8 @@ if submitted:
         {"항목": "위도", "값": f"{lat:.4f}"},
         {"항목": "경도", "값": f"{lon:.4f}"},
         {"항목": "타임존", "값": tz},
-        {"항목": "Sect", "값": sect},
-        {"항목": "Ascendant(도)", "값": f"{chart['asc']:.4f}"},
+        {"항목": "섹트", "값": sect},
+        {"항목": "어센던트 도수", "값": f"{chart['asc']:.4f}"},
     ]
     meta_df = pd.DataFrame(meta_rows)
     st.subheader("기본 정보 요약")
@@ -383,7 +366,7 @@ if submitted:
     # ==============================
     # Level 1
     # ==============================
-    with st.spinner("Level 1 계산 중..."):
+    with st.spinner("레벨 1 계산 중..."):
         level1 = calculate_level1(chart, birth_datetime, asc_times, usp)
         seq_str = " → ".join(level1['sequence'])
         st.success(f"Level 1 행성 순서: {seq_str}")
@@ -413,8 +396,8 @@ if submitted:
             "행성": f"{PLANET_KO[planet]} ({planet})",
             "Arc of direction(°)": round(arc, 6),
             "분배 비율": round(prop, 12),
-            "분배 연수(년)": round(yrs, 6),
-            "누적 연수(년)": round(cum_years, 6),
+            "할당된 시간(년)": round(yrs, 6),
+            "누적 시간(년)": round(cum_years, 6),
             "시작": start_dt.strftime("%Y-%m-%d"),
             "종료": end_dt.strftime("%Y-%m-%d"),
         })
@@ -454,8 +437,8 @@ if submitted:
                 'periods': calculate_sublevel(sub, level1['sequence'], sub['duration_years']),
             })
 
-    # ==============================
-    # Level 3 & 4 현재 활성 구간
+  # ==============================
+    # Level 3 & 4 현재 활성 구간 (Level1 바로 아래에)
     # ==============================
     col3, col4 = st.columns(2)
     with col3:
@@ -463,104 +446,74 @@ if submitted:
         blk3, act3 = find_active_with_block(level3_all, target_date)
         if act3:
             tag = f"{blk3['parent_l1']}-{blk3['parent_l2']}-{act3['planet']}"
-            st.markdown(f"**활성 구간**: `{tag}`")
+            st.markdown(f"**활성**: `{tag}`")
             st.write(f"시작: `{act3['start_date'].strftime('%Y-%m-%d')}`")
             st.write(f"종료: `{act3['end_date'].strftime('%Y-%m-%d')}`")
             st.write(f"기간: `{act3['duration_years']:.6f}`년")
         else:
-            st.info("활성 Level 3 구간 없음")
+            st.info("활성 구간 없음")
 
     with col4:
         st.subheader(f"Level 4: Sub-Sub-Minor (기준일: {target_date_input})")
         blk4, act4 = find_active_with_block(level4_all, target_date)
         if act4:
             tag = f"{blk4['parent_l1']}-{blk4['parent_l2']}-{blk4['parent_l3']}-{act4['planet']}"
-            st.markdown(f"**활성 구간**: `{tag}`")
+            st.markdown(f"**활성**: `{tag}`")
             st.write(f"시작: `{act4['start_date'].strftime('%Y-%m-%d')}`")
             st.write(f"종료: `{act4['end_date'].strftime('%Y-%m-%d')}`")
             st.write(f"기간: `{act4['duration_years']:.8f}`년")
         else:
-            st.info("활성 Level 4 구간 없음")
+            st.info("활성 구간 없음")
 
     # ==============================
-    # Level 2 전체
+    # Level 2 전체 (항상 보이게)
     # ==============================
     l2_rows = []
     for block in level2_all:
         for sp in block['periods']:
             l2_rows.append({
-                "L1 (Major)": block['parent'],
-                "L2 (Minor)": sp['planet'],
+                "메이저(레벨 1)": block['parent'],
+                "마이너(레벨 2)": sp['planet'],
                 "시작": sp['start_date'].strftime("%Y-%m-%d"),
                 "종료": sp['end_date'].strftime("%Y-%m-%d"),
-                "기간(년)": round(sp['duration_years'], 6),
+                "기간(년)": f"{sp['duration_years']:.4f}"
             })
-    l2_df = pd.DataFrame(l2_rows)
     st.subheader("Level 2: Minor Periods")
-    st.dataframe(l2_df, use_container_width=True)
+    st.dataframe(pd.DataFrame(l2_rows), use_container_width=True)
 
     # ==============================
-    # Level 3 전체 (Expander)
-    # ==============================
-    l3_rows = []
-    for block in level3_all:
-        for sp in block['periods']:
-            l3_rows.append({
-                "L1": block['parent_l1'],
-                "L2": block['parent_l2'],
-                "L3": sp['planet'],
-                "시작": sp['start_date'].strftime("%Y-%m-%d"),
-                "종료": sp['end_date'].strftime("%Y-%m-%d"),
-                "기간(년)": round(sp['duration_years'], 6),
-            })
-    l3_df = pd.DataFrame(l3_rows)
-
-    # ==============================
-    # Level 4 전체 (Expander)
-    # ==============================
-    l4_rows = []
-    for block in level4_all:
-        for sp in block['periods']:
-            l4_rows.append({
-                "L1": block['parent_l1'],
-                "L2": block['parent_l2'],
-                "L3": block['parent_l3'],
-                "L4": sp['planet'],
-                "시작": sp['start_date'].strftime("%Y-%m-%d"),
-                "종료": sp['end_date'].strftime("%Y-%m-%d"),
-                "기간(년)": round(sp['duration_years'], 8),
-            })
-    l4_df = pd.DataFrame(l4_rows)
-
-    # ==============================
-    # Level 3 전체 (필요할 때만 펼침) + 엑셀 다운로드
+    # Level 3 전체 (필요할 때만 펼침)
     # ==============================
     with st.expander("Level 3: Sub-Minor Periods (전체 보기)", expanded=False):
-        st.dataframe(l3_df, use_container_width=True)
-
-        # 여기서 전체 시트 포함한 엑셀 파일 생성
-        export_bytes = build_export_excel(
-            meta_df,   # 기본 정보
-            asc_df,    # 사인별 상승시간
-            l1_df,     # Level 1
-            l1_debug_df,  # Level 1 디버그
-            l2_df,     # Level 2
-            l3_df,     # Level 3
-            l4_df,     # Level 4
-        )
-
-        st.download_button(
-            "전체 데이터 엑셀 다운로드 (Meta + Asc + L1~L4)",
-            data=export_bytes,
-            file_name="decennials_full.xlsx",
-            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        )
+        l3_rows = []
+        for block in level3_all:
+            for sp in block['periods']:
+                l3_rows.append({
+                    "L1": block['parent_l1'],
+                    "L2": block['parent_l2'],
+                    "L3": sp['planet'],
+                    "시작": sp['start_date'].strftime("%Y-%m-%d"),
+                    "종료": sp['end_date'].strftime("%Y-%m-%d"),
+                    "기간(년)": f"{sp['duration_years']:.6f}"
+                })
+        st.dataframe(pd.DataFrame(l3_rows), use_container_width=True)
 
     # ==============================
     # Level 4 전체 (필요할 때만 펼침)
     # ==============================
     with st.expander("Level 4: Sub-Sub-Minor Periods (전체 보기)", expanded=False):
-        st.dataframe(l4_df, use_container_width=True)
+        l4_rows = []
+        for block in level4_all:
+            for sp in block['periods']:
+                l4_rows.append({
+                    "L1": block['parent_l1'],
+                    "L2": block['parent_l2'],
+                    "L3": block['parent_l3'],
+                    "L4": sp['planet'],
+                    "시작": sp['start_date'].strftime("%Y-%m-%d"),
+                    "종료": sp['end_date'].strftime("%Y-%m-%d"),
+                    "기간(년)": f"{sp['duration_years']:.8f}"
+                })
+        st.dataframe(pd.DataFrame(l4_rows), use_container_width=True)
 
     st.success("모든 계산 완료!")
-
