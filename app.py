@@ -269,16 +269,29 @@ def find_active_with_block(blocks, dt):
 # ==============================
 def build_export_excel(meta_df, asc_df, l1_df, l1_debug_df, l2_df, l3_df, l4_df) -> bytes:
     output = BytesIO()
-    with pd.ExcelWriter(output, engine="xlsxwriter") as writer:
-        meta_df.to_excel(writer, index=False, sheet_name="Meta")
-        asc_df.to_excel(writer, index=False, sheet_name="AscTimes")
-        l1_df.to_excel(writer, index=False, sheet_name="Level1")
-        l1_debug_df.to_excel(writer, index=False, sheet_name="Level1_Debug")
-        l2_df.to_excel(writer, index=False, sheet_name="Level2")
-        l3_df.to_excel(writer, index=False, sheet_name="Level3")
-        l4_df.to_excel(writer, index=False, sheet_name="Level4")
-    return output.getvalue()
 
+    # 우선 xlsxwriter 시도, 없으면 openpyxl 사용
+    try:
+        with pd.ExcelWriter(output, engine="xlsxwriter") as writer:
+            meta_df.to_excel(writer, index=False, sheet_name="Meta")
+            asc_df.to_excel(writer, index=False, sheet_name="AscTimes")
+            l1_df.to_excel(writer, index=False, sheet_name="Level1")
+            l1_debug_df.to_excel(writer, index=False, sheet_name="Level1_Debug")
+            l2_df.to_excel(writer, index=False, sheet_name="Level2")
+            l3_df.to_excel(writer, index=False, sheet_name="Level3")
+            l4_df.to_excel(writer, index=False, sheet_name="Level4")
+    except ModuleNotFoundError:
+        # xlsxwriter가 없는 환경에서는 openpyxl로 fallback
+        with pd.ExcelWriter(output, engine="openpyxl") as writer:
+            meta_df.to_excel(writer, index=False, sheet_name="Meta")
+            asc_df.to_excel(writer, index=False, sheet_name="AscTimes")
+            l1_df.to_excel(writer, index=False, sheet_name="Level1")
+            l1_debug_df.to_excel(writer, index=False, sheet_name="Level1_Debug")
+            l2_df.to_excel(writer, index=False, sheet_name="Level2")
+            l3_df.to_excel(writer, index=False, sheet_name="Level3")
+            l4_df.to_excel(writer, index=False, sheet_name="Level4")
+
+    return output.getvalue()
 # ==============================
 # UI
 # ==============================
@@ -530,13 +543,22 @@ if submitted:
     l4_df = pd.DataFrame(l4_rows)
 
     # ==============================
-    # 엑셀 내보내기 (Level 3 섹션에 버튼 하나만)
+    # Level 3 전체 (필요할 때만 펼침) + 엑셀 다운로드
     # ==============================
     with st.expander("Level 3: Sub-Minor Periods (전체 보기)", expanded=False):
         st.dataframe(l3_df, use_container_width=True)
+
+        # 여기서 전체 시트 포함한 엑셀 파일 생성
         export_bytes = build_export_excel(
-            meta_df, asc_df, l1_df, l1_debug_df, l2_df, l3_df, l4_df
+            meta_df,   # 기본 정보
+            asc_df,    # 사인별 상승시간
+            l1_df,     # Level 1
+            l1_debug_df,  # Level 1 디버그
+            l2_df,     # Level 2
+            l3_df,     # Level 3
+            l4_df,     # Level 4
         )
+
         st.download_button(
             "전체 데이터 엑셀 다운로드 (Meta + Asc + L1~L4)",
             data=export_bytes,
@@ -544,8 +566,10 @@ if submitted:
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         )
 
+    # ==============================
+    # Level 4 전체 (필요할 때만 펼침)
+    # ==============================
     with st.expander("Level 4: Sub-Sub-Minor Periods (전체 보기)", expanded=False):
         st.dataframe(l4_df, use_container_width=True)
 
     st.success("모든 계산 완료!")
-
