@@ -259,7 +259,7 @@ st.title("Personalized Decennials Calculator (4-Level)")
 with st.form("input_form"):
     col1, col2 = st.columns(2)
     with col1:
-        birth_date = st.date_input("출생일", value=datetime(1970, 1, 01))
+        birth_date = st.date_input("출생일", value=datetime(1970, 1, 1))
         time_str = st.text_input("출생 시간 (HH:MM)", value="00:00", help="예: 0:30, 14:27")
     with col2:
         city_input = st.text_input("출생 도시 (영문)", value="Seoul")
@@ -551,5 +551,6 @@ if submitted:
         st.dataframe(pd.DataFrame(l4_rows), use_container_width=True)
 
     st.success("모든 계산 완료!")
+
 
 
