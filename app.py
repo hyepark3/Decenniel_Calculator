@@ -275,8 +275,8 @@ with st.form("input_form"):
         min_value=date(1900, 1, 1),
         max_value=date(2100, 12, 31),
     )
-    submitted = st.form_submit_button("계산 시작")
-    submitted = st.form_submit_button("계산 시작")
+    # 🔴 여기 줄만 이렇게 수정
+    submitted = st.form_submit_button("계산 시작", key="submit_main")
 
 if submitted:
     # 시간 유효성 검사
@@ -557,6 +557,7 @@ if submitted:
         st.dataframe(pd.DataFrame(l4_rows), use_container_width=True)
 
     st.success("모든 계산 완료!")
+
 
 
 
