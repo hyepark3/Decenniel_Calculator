@@ -192,16 +192,22 @@ def calculate_level1(chart_data, birth_datetime, asc_times, usp):
         arcs.append(arc)
 
     total_arc = sum(arcs)
+
+    # 엑셀 / Gemini 규칙 그대로: Arc * (75/360)
     if total_arc < 1e-8:
         st.warning("Arc 합계가 0에 가까움 → 평균 분배 사용")
         durations = [75.0 / 7] * 7
     else:
-        durations = [arc / total_arc * 75.0 for arc in arcs]
+        # 참고용: 합이 360과 많이 다르면 경고
+        if abs(total_arc - 360.0) > 1e-4:
+            st.warning(f"Arc 합계가 360°와 {total_arc:.6f}°로 약간 다릅니다.")
+        durations = [arc * 75.0 / 360.0 for arc in arcs]
+
 
     periods = []
     cur = birth_datetime
     for i, planet in enumerate(sequence):
-        days = durations[i] * 365.25
+        days = durations[i] * 365.242199
         end = cur + timedelta(days=days)
         periods.append({
             'planet': planet,
@@ -253,8 +259,8 @@ st.title("Personalized Decennials Calculator (4-Level)")
 with st.form("input_form"):
     col1, col2 = st.columns(2)
     with col1:
-        birth_date = st.date_input("출생일", value=datetime(1980, 5, 14))
-        time_str = st.text_input("출생 시간 (HH:MM)", value="05:30", help="예: 05:30, 14:27")
+        birth_date = st.date_input("출생일", value=datetime(1970, 1, 01))
+        time_str = st.text_input("출생 시간 (HH:MM)", value="00:00", help="예: 0:30, 14:27")
     with col2:
         city_input = st.text_input("출생 도시 (영문)", value="Seoul")
         selected_city = city_input
@@ -428,7 +434,7 @@ if submitted:
         "행성": p['planet'],
         "시작": p['start_date'].strftime("%Y-%m-%d"),
         "종료": p['end_date'].strftime("%Y-%m-%d"),
-        "기간(년)": f"{p['duration_years']:.3f}"
+        "기간(년)": f"{p['duration_years']:.6f}"
     } for p in level1['periods']])
     st.subheader("Level 1: Major Periods")
     st.dataframe(l1_df, use_container_width=True)
@@ -545,4 +551,5 @@ if submitted:
         st.dataframe(pd.DataFrame(l4_rows), use_container_width=True)
 
     st.success("모든 계산 완료!")
+
 
