@@ -54,22 +54,47 @@ def ecliptic_to_ra(ecl_lon, obliquity):
     eps = math.radians(obliquity)
     ra = math.atan2(math.sin(lam) * math.cos(eps), math.cos(lam))
     return math.degrees(ra) % 360.0
+# 기존의 calculate_ascensional_times 함수를 지우고,
+# 아래의 새 함수로 완전히 대체해주세요.
 
 def calculate_ascensional_times(latitude, jd):
+    """
+    [수정된 버전]
+    주어진 위도에서 12궁의 실제 상승 시간(Oblique Ascension)을
+    pyswisseph의 rise_trans 함수를 이용해 정확하게 계산합니다.
+    """
     if abs(latitude) > 66.5:
-        st.warning(f"고위도 지역 (위도 {latitude:.1f}도): 일부 궁 상승 불가. 이론적 계산 사용 중.")
-    ascensional_times = []
-    eps = swe.calc_ut(jd, swe.ECL_NUT)[0][0]
-    for sign in range(12):
-        sign_start_lon = sign * 30.0
-        sign_end_lon = (sign + 1) * 30.0
-        ra_start = ecliptic_to_ra(sign_start_lon, eps)
-        ra_end = ecliptic_to_ra(sign_end_lon, eps)
-        asc_time = ra_end - ra_start
-        if asc_time < 0:
-            asc_time += 360.0
-        ascensional_times.append(asc_time)
-    return ascensional_times
+        st.warning(f"고위도 지역 (위도 {latitude:.1f}도): 일부 궁 상승 불가. 정확도가 떨어질 수 있습니다.")
+
+    # 계산의 기준이 될 하루 전후의 율리우스력을 준비합니다.
+    jd_start = jd - 1
+
+    # '고정된 별'처럼 취급하여 각 별자리 시작점의 상승 시각을 찾습니다.
+    # geopos: [경도, 위도, 고도]
+    geopos = [0, latitude, 0] 
+    # rsmi: 상승(swe.CALC_RISE), 천문박명 아래(-18도), swe.BIT_FIXED_DISC_PERIMETER 플래그
+    rsmi = swe.CALC_RISE | swe.BIT_DISC_CENTER
+
+    sign_rise_jds = []
+    for sign in range(13): # 0도부터 360도까지 (양자리 0도 ~ 다음 양자리 0도)
+        ecl_lon = sign * 30.0
+        # swe.fixstar_ut 함수는 ecl_lon을 별의 위치처럼 계산해줍니다.
+        starname = f"sign_{sign}".encode()
+        jd_ut, _, _ = swe.fixstar_ut(starname, jd_start, ecl_lon, 0, rsmi, geopos)
+        sign_rise_jds.append(jd_ut)
+
+    # 각 상승 시각의 차이를 계산하여 '기간'(일)으로 변환합니다.
+    ascensional_times_in_days = []
+    for i in range(12):
+        # 율리우스력의 차이는 '일' 단위입니다.
+        duration_days = sign_rise_jds[i+1] - sign_rise_jds[i]
+        ascensional_times_in_days.append(duration_days)
+
+    # 최종적으로 '일' 단위를 '도' 단위로 변환합니다. (1일 = 360도 회전)
+    ascensional_times_in_degrees = [days * 360 for days in ascensional_times_in_days]
+
+    return ascensional_times_in_degrees
+
 
 def calculate_unique_starting_point(planet_longitude, ascensional_times):
     sign = int(planet_longitude // 30)
@@ -287,5 +312,6 @@ if submitted:
             st.markdown("---")
     if not found:
         st.info("해당 날짜에 활성화된 Level 4가 없습니다.")
+
 
     st.success("모든 계산 완료!")
