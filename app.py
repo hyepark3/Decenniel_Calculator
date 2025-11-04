@@ -313,35 +313,109 @@ if submitted:
     st.subheader("Ascensional Times (Sign Rising Times)")
     st.table(pd.DataFrame(asc_rows))
 
-    # 2) 행성별 USP 디버그 표
-    usp_rows = []
+    # 2) 섹트 루미나리 기준 행성 상승 Arc 디버그
+    sect_lord = 'Sun' if chart['is_diurnal'] else 'Moon'
+
+    # 행성이름 한글 매핑
+    PLANET_KO = {
+        'Sun': '태양',
+        'Moon': '달',
+        'Mercury': '수성',
+        'Venus': '금성',
+        'Mars': '화성',
+        'Jupiter': '목성',
+        'Saturn': '토성',
+    }
+
+    # 섹트 루미나리 위치 정보
+    lum_lon = chart['planets'][sect_lord] % 360.0
+    lum_sign_idx = int(lum_lon // 30)
+    lum_deg_in_sign = lum_lon % 30.0
+    lum_sign_name = SIGN_NAMES[lum_sign_idx]
+
+    # 루미나리 사인 전체 상승시간 & 사용/잔여 분해
+    lum_sign_time = asc_times[lum_sign_idx]           # 루미나리 사인의 전체 AscTime
+    lum_frac = lum_deg_in_sign / 30.0
+    lum_used_in_sign = lum_sign_time * lum_frac       # 0°→루미나리까지
+    lum_tail_arc = lum_sign_time - lum_used_in_sign   # 루미나리 이후→사인 끝까지
+
+    # 중간 사인 Arc 계산 (루미나리 사인 다음 ~ 목표 사인의 직전)
+    def intermediate_arc(sign_from, sign_to):
+        """sign_from 다음 사인부터 sign_to 직전 사인까지 AscTime 합 (mod 12)"""
+        if sign_from == sign_to:
+            return 0.0
+        arc = 0.0
+        i = (sign_from + 1) % 12
+        while i != sign_to:
+            arc += asc_times[i]
+            i = (i + 1) % 12
+        return arc
+
+    rows = []
+
+    # 1) 맨 위에 섹트 루미나리 한 줄 (Arc = 0, 시작일 = 출생일)
+    rows.append({
+        "행성": f"{PLANET_KO[sect_lord]} ({sect_lord})",
+        "사인": lum_sign_name,
+        "행성도수(°)": round(lum_deg_in_sign, 4),
+        "루미나리 사인": lum_sign_name,
+        "루미나리도수(°)": round(lum_deg_in_sign, 4),
+        "루미나리 잔여 Arc": round(lum_tail_arc, 4),
+        "중간 사인 Arc": 0.0,
+        "행성 Arc": 0.0,
+        "총 Arc": 0.0,
+        "상승 시작 날짜": birth_datetime.strftime("%Y-%m-%d"),
+    })
+
+    # 2) 나머지 행성들: 섹트 루미나리 → 각 행성까지 Arc 분해
+    planet_rows = []
     for name in PLANETS:
+        if name == sect_lord:
+            continue
+
         info = usp_details[name]
         sign_idx = info["sign_idx"]
         sign_name = SIGN_NAMES[sign_idx]
-        prev_sign = SIGN_NAMES[sign_idx - 1] if sign_idx > 0 else "Pisces"
         deg_in_sign = info["deg_in_sign"]
-        base_time = info["base_time"]
-        part_time = info["time_in_sign"]
-        usp_val = info["usp"]
 
-        usp_years = usp_val / 360.0 * 75.0
-        usp_date = birth_datetime + timedelta(days=usp_years * 365.25)
+        # 행성 사인의 전체 AscTime & 그 안에서 행성 Arc
+        sign_time = asc_times[sign_idx]
+        frac_p = deg_in_sign / 30.0
+        planet_arc = sign_time * frac_p
 
-        usp_rows.append({
-            "행성": name,
+        # 루미나리 기준 중간 사인 합
+        mid_arc = intermediate_arc(lum_sign_idx, sign_idx)
+
+        # 총 Arc = 루미나리 tail + 중간사인 + 행성 Arc
+        total_arc = lum_tail_arc + mid_arc + planet_arc
+
+        # 총 Arc를 75년 스케일로 환산
+        years = total_arc / 360.0 * 75.0
+        start_date = birth_datetime + timedelta(days=years * 365.25)
+
+        planet_rows.append({
+            "행성": f"{PLANET_KO[name]} ({name})",
             "사인": sign_name,
             "행성도수(°)": round(deg_in_sign, 4),
-            "이전사인": prev_sign,
-            "이전사인 상승시간합": round(base_time, 4),
-            "행성 Arc": round(part_time, 4),
-            "(이전+행성) Arc (USP)": round(usp_val, 4),
-            "USP 기준 기간(년)": round(usp_years, 4),
-            "USP 기준 날짜": usp_date.strftime("%Y-%m-%d"),
+            "루미나리 사인": lum_sign_name,
+            "루미나리도수(°)": round(lum_deg_in_sign, 4),
+            "루미나리 잔여 Arc": round(lum_tail_arc, 4),
+            "중간 사인 Arc": round(mid_arc, 4),
+            "행성 Arc": round(planet_arc, 4),
+            "총 Arc": round(total_arc, 4),
+            "상승 시작 날짜": start_date.strftime("%Y-%m-%d"),
         })
 
-    st.subheader("Planet USP 디버그 (Ascensional Arc)")
-    st.table(pd.DataFrame(usp_rows))
+    # 총 Arc 기준으로 정렬 (섹트 루미나리 이후 누가 먼저 떠오르는지 순서)
+    planet_rows.sort(key=lambda r: r["총 Arc"])
+
+    # 최종 테이블: 루미나리 1줄 + 나머지 행성들
+    rows.extend(planet_rows)
+
+    st.subheader("섹트 루미나리 기준 행성 상승 Arc 디버그")
+    st.table(pd.DataFrame(rows))
+
+
 
     # ==============================
     # Level 1
@@ -471,3 +545,4 @@ if submitted:
         st.dataframe(pd.DataFrame(l4_rows), use_container_width=True)
 
     st.success("모든 계산 완료!")
+
