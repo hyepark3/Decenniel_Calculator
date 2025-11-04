@@ -386,7 +386,7 @@ if submitted:
         st.success(f"Level 1 행성 순서: {seq_str}")
 
     l1_df = pd.DataFrame([{
-        "행성": f"{PLANET_KO[p['planet']} ({p['planet']})",
+        "행성": f"{PLANET_KO[p['planet']]} ({p['planet']})",
         "시작": p['start_date'].strftime("%Y-%m-%d"),
         "종료": p['end_date'].strftime("%Y-%m-%d"),
         "기간(년)": round(p['duration_years'], 6),
@@ -548,3 +548,4 @@ if submitted:
         st.dataframe(l4_df, use_container_width=True)
 
     st.success("모든 계산 완료!")
+
