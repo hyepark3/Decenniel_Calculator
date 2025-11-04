@@ -56,40 +56,50 @@ def get_coordinates_and_timezone(city_name):
 # 정확한 상승 시간 계산 (swe.rise_trans 기반)
 # ==============================
 def calculate_ascensional_times(latitude, longitude, jd):
+    """기존 수학적 방법 (안정적) + swe.rise_trans 보완"""
     if abs(latitude) > 66.5:
-        st.warning(f"고위도 지역 (위도 {latitude:.1f}도): 일부 궁 상승 불가. 정확도가 떨어질 수 있습니다.")
+        st.warning(f"고위도 지역 (위도 {latitude:.1f}도): 이론적 계산 사용.")
 
-    geopos = [longitude, latitude, 0]  # [경도, 위도, 고도]
-    jd_start = jd - 1
-    rsmi = swe.CALC_RISE | swe.BIT_DISC_CENTER
-
-    sign_rise_jds = []
-    for sign in range(13):
-        ecl_lon = sign * 30.0
+    # Step 1: 이론적 방법 (항상 안정적)
+    eps = swe.calc_ut(jd, swe.ECL_NUT)[0][0]
+    asc_times = []
+    for sign in range(12):
+        lon1 = sign * 30.0
+        lon2 = (sign + 1) * 30.0
+        ra1 = math.degrees(math.atan2(math.sin(math.radians(lon1)) * math.cos(math.radians(eps)), math.cos(math.radians(lon1))))
+        ra2 = math.degrees(math.atan2(math.sin(math.radians(lon2)) * math.cos(math.radians(eps)), math.cos(math.radians(lon2))))
+        diff = (ra2 - ra1) % 360
+        asc_times.append(diff if diff > 0 else diff + 360)
+    
+    # Step 2: swe.rise_trans로 보완 (고위도 제외)
+    if abs(latitude) <= 66.5:
         try:
-            ret, t_ut = swe.rise_trans(
-                jd_start, -1, '', rsmi, geopos, 0, 0,
-                atpress=0, attemp=0, lon=ecl_lon, lat=0
-            )
-            if ret > 0:
-                sign_rise_jds.append(t_ut)
-            else:
-                sign_rise_jds.append(jd_start + 0.5)  # fallback
+            geopos = [longitude, latitude, 0]
+            jd_start = jd - 1
+            rsmi = swe.CALC_RISE | swe.BIT_DISC_CENTER
+            rise_jds = []
+            for sign in range(13):
+                lon = sign * 30.0
+                ret, t_ut = swe.rise_trans(jd_start, -1, '', rsmi, geopos, 0, 0, lon, 0)
+                rise_jds.append(t_ut if ret > 0 else jd_start + 0.5)
+            real_times = [(rise_jds[i+1] - rise_jds[i]) % 1 for i in range(12)]
+            real_times = [t if t <= 0.5 else 1 - t for t in real_times]
+            real_times = [max(t, 1e-6) for t in real_times]  # 0 방지
+            total_real = sum(real_times)
+            if total_real > 0:
+                real_times = [t / total_real * 360 for t in real_times]
+                # 이론값과 실제값 보간
+                asc_times = [(asc_times[i] + real_times[i]) / 2 for i in range(12)]
         except:
-            sign_rise_jds.append(jd_start + 0.5)
+            pass  # 실패 시 이론값 유지
 
-    # 상승 시간 차이 (일 단위)
-    asc_times_days = []
-    for i in range(12):
-        diff = sign_rise_jds[i+1] - sign_rise_jds[i]
-        if diff < 0:
-            diff += 1
-        if diff > 0.5:
-            diff = 1 - diff
-        asc_times_days.append(abs(diff))
-
-    # 일 → 도 변환
-    return [days * 360.0 for days in asc_times_days]
+    # 정규화
+    total = sum(asc_times)
+    if total < 1e-6:
+        asc_times = [30.0] * 12  # 극단적 fallback
+    else:
+        asc_times = [a * 360 / total for a in asc_times]
+    return asc_times
 
 # ==============================
 # 나머지 함수 (기존과 동일, 약간 최적화)
@@ -123,28 +133,56 @@ def rotate_sequence(seq, start): return seq[seq.index(start):] + seq[:seq.index(
 def calculate_level1(chart_data, birth_datetime):
     lat, lon, jd = chart_data['latitude'], chart_data['longitude'], chart_data['jd']
     asc_times = calculate_ascensional_times(lat, lon, jd)
-    usp = {p: calculate_unique_starting_point(chart_data['planets'][p], asc_times) for p in PLANETS}
+    
+    # USP 계산
+    usp = {}
+    for p in PLANETS:
+        lon = chart_data['planets'][p]
+        sign = int(lon // 30)
+        deg = lon % 30
+        cum = sum(asc_times[:sign])
+        prop = (deg / 30.0) * asc_times[sign]
+        usp[p] = cum + prop
+
     sect_lord = 'Sun' if chart_data['is_diurnal'] else 'Moon'
     base = usp[sect_lord]
     usp_rot = {p: (usp[p] - base) % 360.0 for p in PLANETS}
+    
+    # 시퀀스
     others = sorted([p for p in PLANETS if p != sect_lord], key=lambda p: usp_rot[p])
     sequence = [sect_lord] + others
+
+    # Arc 계산 (최소값 보장)
     arcs = []
     for i in range(7):
         cur, nxt = sequence[i], sequence[(i+1)%7]
         arc = (usp_rot[nxt] - usp_rot[cur]) % 360
+        arc = max(arc, 1e-10)  # 0 방지
         arcs.append(arc)
-    total = sum(arcs)
-    if abs(total - 360) > 1e-6:
-        arcs = [a * 360 / total for a in arcs]
-    durations = [arc / 360 * 75 for arc in arcs]
+
+    total_arc = sum(arcs)
+    
+    # ZeroDivision 방어
+    if total_arc < 1e-8:
+        st.warning("Arc 합계가 0에 가까움 → 평균 분배 사용")
+        durations = [75.0 / 7] * 7
+    else:
+        durations = [arc / total_arc * 75.0 for arc in arcs]
+
+    # 기간 생성
     periods = []
     cur = birth_datetime
     for i, planet in enumerate(sequence):
         days = durations[i] * 365.25
         end = cur + timedelta(days=days)
-        periods.append({'planet': planet, 'start_date': cur, 'end_date': end, 'duration_years': durations[i]})
+        periods.append({
+            'planet': planet,
+            'start_date': cur,
+            'end_date': end,
+            'duration_years': durations[i]
+        })
         cur = end
+
     return {'sequence': sequence, 'periods': periods}
 
 def calculate_sublevel(parent, seq, duration):
@@ -328,3 +366,4 @@ if submitted:
         st.dataframe(pd.DataFrame(l4_data), use_container_width=True)
 
     st.success("모든 계산 완료!")
+
