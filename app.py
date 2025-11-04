@@ -270,28 +270,18 @@ def find_active_with_block(blocks, dt):
 def build_export_excel(meta_df, asc_df, l1_df, l1_debug_df, l2_df, l3_df, l4_df) -> bytes:
     output = BytesIO()
 
-    # 우선 xlsxwriter 시도, 없으면 openpyxl 사용
-    try:
-        with pd.ExcelWriter(output, engine="xlsxwriter") as writer:
-            meta_df.to_excel(writer, index=False, sheet_name="Meta")
-            asc_df.to_excel(writer, index=False, sheet_name="AscTimes")
-            l1_df.to_excel(writer, index=False, sheet_name="Level1")
-            l1_debug_df.to_excel(writer, index=False, sheet_name="Level1_Debug")
-            l2_df.to_excel(writer, index=False, sheet_name="Level2")
-            l3_df.to_excel(writer, index=False, sheet_name="Level3")
-            l4_df.to_excel(writer, index=False, sheet_name="Level4")
-    except ModuleNotFoundError:
-        # xlsxwriter가 없는 환경에서는 openpyxl로 fallback
-        with pd.ExcelWriter(output, engine="openpyxl") as writer:
-            meta_df.to_excel(writer, index=False, sheet_name="Meta")
-            asc_df.to_excel(writer, index=False, sheet_name="AscTimes")
-            l1_df.to_excel(writer, index=False, sheet_name="Level1")
-            l1_debug_df.to_excel(writer, index=False, sheet_name="Level1_Debug")
-            l2_df.to_excel(writer, index=False, sheet_name="Level2")
-            l3_df.to_excel(writer, index=False, sheet_name="Level3")
-            l4_df.to_excel(writer, index=False, sheet_name="Level4")
+    # 엑셀 파일 생성 (엔진 자동 선택)
+    with pd.ExcelWriter(output) as writer:
+        meta_df.to_excel(writer, index=False, sheet_name="Meta")
+        asc_df.to_excel(writer, index=False, sheet_name="AscTimes")
+        l1_df.to_excel(writer, index=False, sheet_name="Level1")
+        l1_debug_df.to_excel(writer, index=False, sheet_name="Level1_Debug")
+        l2_df.to_excel(writer, index=False, sheet_name="Level2")
+        l3_df.to_excel(writer, index=False, sheet_name="Level3")
+        l4_df.to_excel(writer, index=False, sheet_name="Level4")
 
     return output.getvalue()
+
 # ==============================
 # UI
 # ==============================
@@ -573,3 +563,4 @@ if submitted:
         st.dataframe(l4_df, use_container_width=True)
 
     st.success("모든 계산 완료!")
+
