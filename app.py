@@ -74,17 +74,20 @@ def get_coordinates_and_timezone(city_name: str):
         raise ValueError("타임존을 찾을 수 없습니다.")
     return location.latitude, location.longitude, timezone_str, location.address
 
+
 # ==============================
-# Ascensional Times (RA–AD–OA 정석 버전)
+# Ascensional Times (정식 공식 적용 버전)
 # ==============================
 def get_obliquity(jd_ut: float) -> float:
     """황도 경사 ε (deg)"""
     return swe.calc_ut(jd_ut, swe.ECL_NUT)[0][0]
 
+
 def oblique_ascension(lon_deg: float, lat_deg: float, eps_deg: float) -> float:
     """
+    Ascensional Time 계산용 보정된 Oblique Ascension (OA)
     1) RA:   tan α = sinλ·cosε / cosλ  → atan2
-    2) δ:    sin δ = sinε · sinλ      (β≈0 가정)
+    2) δ:    sin δ = sinε · sinλ
     3) AD:   sin AD = tanφ · tanδ
     4) OA:   OA = RA - AD
     """
@@ -95,39 +98,46 @@ def oblique_ascension(lon_deg: float, lat_deg: float, eps_deg: float) -> float:
     sin_l = math.sin(lam)
     cos_l = math.cos(lam)
 
-    # RA
+    # Right Ascension (RA)
     alpha = math.atan2(sin_l * math.cos(eps), cos_l)
 
-    # declination δ
+    # Declination (δ)
     delta = math.asin(math.sin(eps) * sin_l)
 
-    # Ascensional Difference
+    # Ascensional Difference (AD)
     td_tf = math.tan(phi) * math.tan(delta)
-    td_tf = max(min(td_tf, 0.9999999), -0.9999999)
+    td_tf = max(min(td_tf, 0.9999999), -0.9999999)  # 안정성 확보
     AD = math.asin(td_tf)
 
-    # Oblique Ascension
+    # Oblique Ascension (OA)
     OA = (alpha - AD)
     return (math.degrees(OA) + 360.0) % 360.0
 
+
 def calculate_ascensional_times(latitude: float, longitude: float, jd_ut: float):
-    """위도 latitude에서 12사인 Ascensional Time 계산 (합 ≈ 360°)"""
+    """
+    위도(latitude)와 황도경사(eps_deg)에 따른 12사인 Ascensional Time 계산.
+    """
     eps_deg = get_obliquity(jd_ut)
     oa_list = []
-    for i in range(13):  # 0, 30, ..., 360
+    for i in range(13):  # 0°, 30°, 60° ... 360°
         lam = i * 30.0
         oa = oblique_ascension(lam, latitude, eps_deg)
         oa_list.append(oa)
 
+    # 사인별 OA 차이 = 상승시간
     asc_times = []
     for i in range(12):
-        d_oa = (oa_list[i+1] - oa_list[i]) % 360.0
+        d_oa = (oa_list[i + 1] - oa_list[i]) % 360.0
         asc_times.append(d_oa)
 
     total = sum(asc_times)
     if total <= 0:
         return [30.0] * 12
+
+    # 합계가 정확히 360이 되도록 정규화
     return [a * 360.0 / total for a in asc_times]
+
 
 def compute_unique_start_points(planet_positions, asc_times):
     """
@@ -152,6 +162,7 @@ def compute_unique_start_points(planet_positions, asc_times):
             "usp": usp[name],
         }
     return usp, details
+
 
 # ==============================
 # Julian Day, 차트, 서브레벨 계산
@@ -184,8 +195,10 @@ def calculate_chart(birth_datetime, latitude, longitude, timezone_str):
         'longitude': longitude,
     }
 
+
 def rotate_sequence(seq, start):
     return seq[seq.index(start):] + seq[:seq.index(start)]
+
 
 def calculate_level1(chart_data, birth_datetime, asc_times, usp):
     """Level 1 Major Periods (USP 기반, Sect 루미나리 기준 회전)"""
@@ -205,12 +218,12 @@ def calculate_level1(chart_data, birth_datetime, asc_times, usp):
     cum_years = 0.0
 
     for i in range(7):
-        cur, nxt = sequence[i], sequence[(i+1) % 7]
+        cur, nxt = sequence[i], sequence[(i + 1) % 7]
         arc = (usp_rot[nxt] - usp_rot[cur]) % 360.0
         arc = max(arc, 1e-10)
         arcs.append(arc)
 
-        years = arc * 75.0 / 360.0  # 75/360 규칙
+        years = arc * 75.0 / 360.0
         durations.append(years)
 
         days = years * 365.242199
@@ -233,6 +246,7 @@ def calculate_level1(chart_data, birth_datetime, asc_times, usp):
         'usp_rot': usp_rot,
     }
 
+
 def calculate_sublevel(parent, seq, duration):
     subseq = rotate_sequence(seq, parent['planet'])
     total_ly = sum(LESSER_YEARS.values())
@@ -251,11 +265,13 @@ def calculate_sublevel(parent, seq, duration):
         cur = end
     return subs
 
+
 def find_active(periods, dt):
     for p in periods:
         if p['start_date'] <= dt < p['end_date']:
             return p
     return None
+
 
 def find_active_with_block(blocks, dt):
     for blk in blocks:
@@ -405,6 +421,7 @@ if submitted:
     st.subheader("행성의 상승시간 (섹트 루미나리 기준)")
     st.table(l1_debug_df)
 
+
     # ==============================
     # Level 2, 3, 4 계산
     # ==============================
@@ -517,3 +534,4 @@ if submitted:
         st.dataframe(pd.DataFrame(l4_rows), use_container_width=True)
 
     st.success("모든 계산 완료!")
+
